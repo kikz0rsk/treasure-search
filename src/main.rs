@@ -1,5 +1,4 @@
 use std::io::Write;
-use std::cell;
 
 use rand::{Rng, SeedableRng};
 use rand_pcg::Pcg64;
@@ -10,7 +9,7 @@ mod core;
 
 type INSTR = u8;
 
-fn random_vector(rng: &mut Pcg64) -> Vec<INSTR> {
+fn random_instructions(rng: &mut Pcg64) -> Vec<INSTR> {
     let mut output: Vec<INSTR> = vec![0; 64];
     for i in 0..16 {
         output[i] = rng.gen_range(0..=u8::MAX);
@@ -19,7 +18,7 @@ fn random_vector(rng: &mut Pcg64) -> Vec<INSTR> {
 }
 
 fn main() {
-    //let mut rng = Pcg64::seed_from_u64(948464);
+    //let mut rng = Pcg64::seed_from_u64(948464);   // Testing seed
     let mut rng = Pcg64::from_entropy();
     let args: Vec<String> = std::env::args().collect();
     if args.len() < 4 {
@@ -52,11 +51,11 @@ fn main() {
     let mut treasures: u32 = 0;
     for y in 0..game_area.len() {
         for x in 0..game_area[0].len() {
-            if game_area[y][x] == core::GAME_AREA_PLAYER {
+            if game_area[y][x] == core::AREA_TILE_PLAYER {
                 player_x = isize::try_from(x).unwrap();
                 player_y = isize::try_from(y).unwrap();
                 print!("P ");
-            } else if game_area[y][x] == core::GAME_AREA_TREASURE {
+            } else if game_area[y][x] == core::AREA_TILE_TREASURE {
                 treasures += 1;
                 print!("█ ");
             } else {
@@ -69,7 +68,7 @@ fn main() {
     let mut current_generation: Vec<core::Chromosome> = Vec::new();
 
     for _ in 0..subjects_num {
-        let instructions = random_vector(&mut rng);
+        let instructions = random_instructions(&mut rng);
 
         current_generation.push(core::Chromosome {
             genes: instructions,
@@ -89,13 +88,11 @@ fn main() {
             println!("\nBest solution so far: Generation: {}, Fitness: {}, Steps: {} ({}), Treasures: {}, Iterations: {}",
                      generations, best_so_far.fitness, best_so_far.steps, best_so_far.steps.len(), best_so_far.found_treasures, best_so_far.iterations);
             println!("{:?}", best_so_far.genes);
-            print!("Do you want to keep searching for a better solution? y/N: ");
-            std::io::stdout().flush();
-            let mut ans = String::new();
-            std::io::stdin().read_line(&mut ans).unwrap();
-            if !ans.trim().eq_ignore_ascii_case("y") {
+
+            if !ask_user("Do you want to keep searching for a better solution? y/N: ") {
                 return;
             }
+
             target_generations = u32::MAX;
         }
         generations += 1;
@@ -107,7 +104,7 @@ fn main() {
                        generations, best_so_far_ref.fitness,
                        best_so_far_ref.found_treasures, best_so_far_ref.steps.len(), best_so_far_ref.iterations);
             }
-            std::io::stdout().flush();
+            std::io::stdout().flush().unwrap();
         }
         for i in 0..current_generation.len() {
             let mut current_chromosome = current_generation.get_mut(i).unwrap();
@@ -134,10 +131,8 @@ fn main() {
                          generations, chromosome.fitness, chromosome.steps, chromosome.steps.len(), chromosome.iterations);
                 println!("{:?}", chromosome.genes);
                 print!("Do you want to keep searching for a better solution? y/N: ");
-                std::io::stdout().flush();
-                let mut ans = String::new();
-                std::io::stdin().read_line(&mut ans).unwrap();
-                if !ans.trim().eq_ignore_ascii_case("y") {
+
+                if !ask_user("Do you want to keep searching for a better solution? y/N: ") {
                     return;
                 }
             }
@@ -175,4 +170,15 @@ fn main() {
         }
         current_generation = new_generation;
     }
+}
+
+fn ask_user(text: &str) -> bool {
+    print!("{}", text);
+    std::io::stdout().flush().unwrap();
+    let mut ans = String::new();
+    std::io::stdin().read_line(&mut ans).unwrap();
+    if !ans.trim().eq_ignore_ascii_case("y") {
+        return false;
+    }
+    return true;
 }

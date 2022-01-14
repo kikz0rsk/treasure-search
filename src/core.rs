@@ -1,9 +1,9 @@
 use rand::Rng;
-use rand::SeedableRng;
-use rand_pcg::{Lcg128Xsl64, Pcg64};
+use rand_pcg::Pcg64;
 
-pub const GAME_AREA_PLAYER: u8 = 1;
-pub const GAME_AREA_TREASURE: u8 = 2;
+pub const AREA_TILE_PLAYER: u8 = 1;
+pub const AREA_TILE_TREASURE: u8 = 2;
+pub const AREA_TILE_NOTHING: u8 = 0;
 
 pub const DIR_UP: usize = 0;
 pub const DIR_RIGHT: usize = 1;
@@ -45,7 +45,7 @@ pub fn run_virtual_machine(instructions: &Vec<u8>, original_game_area: &Vec<Vec<
     let mut curr_instr_index: usize = 0;
     let mut iterations: u32 = 0;
     let mut found_treasures: u32 = 0;
-    'main: while iterations < 500 && curr_instr_index < 64 && found_treasures < treasures {
+    while iterations < 500 && curr_instr_index < 64 && found_treasures < treasures {
         let instruction: u8 = machine_memory[curr_instr_index];
 
         let operation: u8 = instruction & 0xC0;
@@ -53,20 +53,20 @@ pub fn run_virtual_machine(instructions: &Vec<u8>, original_game_area: &Vec<Vec<
         let mut jump: bool = false;
         match operation {
             0 => {
-                // Inkrementacia
+                // Increment
                 machine_memory[data] = cyclic_increment_u8(machine_memory[data]);
             }
             64 => {
-                // Dekrementacia
+                // Decrement
                 machine_memory[data] = cyclic_decrement_u8(machine_memory[data]);
             }
             128 => {
-                // Skok
+                // Jump
                 curr_instr_index = data;
                 jump = true;
             }
             192 => {
-                // Vypis
+                // Move (print)
                 match data & 3 {
                     DIR_UP => {
                         //print!("H");
@@ -91,9 +91,9 @@ pub fn run_virtual_machine(instructions: &Vec<u8>, original_game_area: &Vec<Vec<
                     _ => {}
                 }
                 if !(player_x >= 0 && player_x < (columns as isize) && player_y >= 0 && player_y < (rows as isize)) {
-                    break 'main;
+                    break;
                 }
-                if game_area[player_y as usize][player_x as usize] == GAME_AREA_TREASURE {
+                if game_area[player_y as usize][player_x as usize] == AREA_TILE_TREASURE {
                     game_area[player_y as usize][player_x as usize] = 0;
                     found_treasures += 1;
                 }
@@ -111,18 +111,17 @@ pub fn run_virtual_machine(instructions: &Vec<u8>, original_game_area: &Vec<Vec<
 }
 
 pub fn build_game_area() -> Vec<Vec<u8>> {
-    let mut game_area: Vec<Vec<u8>> = vec![vec![0; 7]; 7];
-    game_area[1][4] = GAME_AREA_TREASURE;
-    game_area[2][2] = GAME_AREA_TREASURE;
-    game_area[3][6] = GAME_AREA_TREASURE;
-    game_area[4][1] = GAME_AREA_TREASURE;
-    game_area[5][4] = GAME_AREA_TREASURE;
-    game_area[6][3] = GAME_AREA_PLAYER;
+    let mut game_area: Vec<Vec<u8>> = vec![vec![AREA_TILE_NOTHING; 7]; 7];
+    game_area[1][4] = AREA_TILE_TREASURE;
+    game_area[2][2] = AREA_TILE_TREASURE;
+    game_area[3][6] = AREA_TILE_TREASURE;
+    game_area[4][1] = AREA_TILE_TREASURE;
+    game_area[5][4] = AREA_TILE_TREASURE;
+    game_area[6][3] = AREA_TILE_PLAYER;
     return game_area;
 }
 
 pub fn reproduce(parent1: &Chromosome, parent2: &Chromosome, mutation_probability: f64, rng: &mut Pcg64) -> Vec<INSTR> {
-    let mut rnd = rand::thread_rng();
     let mut output_vector = Vec::new();
     for i in 0..64 {
         let mut mask: u8 = 128;
@@ -135,8 +134,9 @@ pub fn reproduce(parent1: &Chromosome, parent2: &Chromosome, mutation_probabilit
                 number |= parent2.genes[i] & mask;
             }
 
+            // Mutation
             if rng.gen_bool(mutation_probability) {
-                number = number ^ mask;
+                number ^= mask;
             }
             mask >>= 1;
         }
@@ -151,11 +151,11 @@ pub fn selection_roulette<'a>(chromosomes: &'a Vec<Chromosome>, total_fitness: f
         let r: f64 = rng.gen_range(0f64..=total_fitness);
         let mut curr_fitness: f64 = 0f64;
         let mut selected_parent: Option<&Chromosome> = Option::None;
-        'inner: for c in chromosomes {
+        for c in chromosomes {
             curr_fitness += c.fitness;
             if curr_fitness > r {
                 selected_parent = Option::Some(c);
-                break 'inner;
+                break;
             }
         }
         if selected_parent.is_none() {
