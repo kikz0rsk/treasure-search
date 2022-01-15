@@ -22,18 +22,24 @@ pub struct Chromosome {
     pub steps: String,
 }
 
-fn cyclic_increment_u8(first: u8) -> u8 {
-    if first == u8::MAX {
-        return 0;
+impl Chromosome {
+    pub fn with_instructions(instructions: Vec<INSTR>) -> Chromosome {
+        return Chromosome {
+            genes: instructions,
+            found_treasures: 0,
+            fitness: 0.0,
+            iterations: 0,
+            steps: String::new(),
+        };
     }
-    return first + 1;
 }
 
-fn cyclic_decrement_u8(first: u8) -> u8 {
-    if first == u8::MIN {
-        return 0;
+pub fn random_instructions(rng: &mut Pcg64) -> Vec<INSTR> {
+    let mut output: Vec<INSTR> = vec![0; 64];
+    for i in 0..16 {
+        output[i] = rng.gen_range(0..=u8::MAX);
     }
-    return first - 1;
+    return output;
 }
 
 pub fn run_virtual_machine(instructions: &Vec<u8>, original_game_area: &Vec<Vec<u8>>, steps: &mut String, mut player_x: isize, mut player_y: isize, treasures: u32) -> (u32, u32) {
@@ -104,21 +110,8 @@ pub fn run_virtual_machine(instructions: &Vec<u8>, original_game_area: &Vec<Vec<
         if !jump {
             curr_instr_index += 1;
         }
-        //println!("{:?}", machine_memory);
     }
-    //println!("{:?}", machine_memory);
     return (iterations, found_treasures);
-}
-
-pub fn build_game_area() -> Vec<Vec<u8>> {
-    let mut game_area: Vec<Vec<u8>> = vec![vec![AREA_TILE_NOTHING; 7]; 7];
-    game_area[1][4] = AREA_TILE_TREASURE;
-    game_area[2][2] = AREA_TILE_TREASURE;
-    game_area[3][6] = AREA_TILE_TREASURE;
-    game_area[4][1] = AREA_TILE_TREASURE;
-    game_area[5][4] = AREA_TILE_TREASURE;
-    game_area[6][3] = AREA_TILE_PLAYER;
-    return game_area;
 }
 
 pub fn reproduce(parent1: &Chromosome, parent2: &Chromosome, mutation_probability: f64, rng: &mut Pcg64) -> Vec<INSTR> {
@@ -127,7 +120,7 @@ pub fn reproduce(parent1: &Chromosome, parent2: &Chromosome, mutation_probabilit
         let mut mask: u8 = 128;
         let mut number: u8 = 0;
         for _ in 0..8 {
-            assert_eq!(number & mask, 0);
+            debug_assert_eq!(number & mask, 0);
             if rng.gen_bool(0.5) {  // Parent 1
                 number |= parent1.genes[i] & mask;
             } else {    // Parent 2
@@ -146,7 +139,7 @@ pub fn reproduce(parent1: &Chromosome, parent2: &Chromosome, mutation_probabilit
 }
 
 pub fn selection_roulette<'a>(chromosomes: &'a Vec<Chromosome>, total_fitness: f64, rng: &mut Pcg64) -> (&'a Chromosome, &'a Chromosome) {
-    let mut v: Vec<&Chromosome> = Vec::new();
+    let mut v: Vec<&Chromosome> = Vec::with_capacity(2);
     for _ in 0..2 {
         let r: f64 = rng.gen_range(0f64..=total_fitness);
         let mut curr_fitness: f64 = 0f64;
@@ -167,7 +160,7 @@ pub fn selection_roulette<'a>(chromosomes: &'a Vec<Chromosome>, total_fitness: f
 }
 
 pub fn selection_tournament<'a>(chromosomes: &'a Vec<Chromosome>, rng: &mut Pcg64) -> (&'a Chromosome, &'a Chromosome) {
-    let mut v: Vec<&Chromosome> = Vec::new();
+    let mut v: Vec<&Chromosome> = Vec::with_capacity(2);
     for _ in 0..2 {
         let index1 = rng.gen_range(0..chromosomes.len());
         let index2 = rng.gen_range(0..chromosomes.len());
@@ -178,4 +171,40 @@ pub fn selection_tournament<'a>(chromosomes: &'a Vec<Chromosome>, rng: &mut Pcg6
         }
     }
     return (v[0], v[1]);
+}
+
+pub fn calculate_fitness(steps: usize, found_treasures: u32, all_treasures: u32) -> f64 {
+    let mut fitness: f64 = found_treasures as f64 / all_treasures as f64;
+    fitness -= steps as f64 * 0.005;
+    if fitness < 0.0 {
+        fitness = 0.0;
+    }
+    return fitness;
+}
+
+pub fn build_game_area() -> Vec<Vec<u8>> {
+    let mut game_area: Vec<Vec<u8>> = vec![vec![AREA_TILE_NOTHING; 7]; 7];
+    game_area[1][4] = AREA_TILE_TREASURE;
+    game_area[2][2] = AREA_TILE_TREASURE;
+    game_area[3][6] = AREA_TILE_TREASURE;
+    game_area[4][1] = AREA_TILE_TREASURE;
+    game_area[5][4] = AREA_TILE_TREASURE;
+    game_area[6][3] = AREA_TILE_PLAYER;
+    return game_area;
+}
+
+#[inline]
+fn cyclic_increment_u8(n: u8) -> u8 {
+    if n == u8::MAX {
+        return 0;
+    }
+    return n + 1;
+}
+
+#[inline]
+fn cyclic_decrement_u8(n: u8) -> u8 {
+    if n == u8::MIN {
+        return 0;
+    }
+    return n - 1;
 }

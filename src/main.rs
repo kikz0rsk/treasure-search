@@ -1,21 +1,12 @@
 use std::io::Write;
+use std::process::exit;
 
-use rand::{Rng, SeedableRng};
+use rand::SeedableRng;
 use rand_pcg::Pcg64;
 
 use crate::core::Chromosome;
 
 mod core;
-
-type INSTR = u8;
-
-fn random_instructions(rng: &mut Pcg64) -> Vec<INSTR> {
-    let mut output: Vec<INSTR> = vec![0; 64];
-    for i in 0..16 {
-        output[i] = rng.gen_range(0..=u8::MAX);
-    }
-    return output;
-}
 
 fn main() {
     //let mut rng = Pcg64::seed_from_u64(948464);   // Testing seed
@@ -28,18 +19,20 @@ fn main() {
         return;
     }
 
-    let subjects_num = args[1].parse::<u32>().unwrap();
+    let subjects_num = args[1].parse::<usize>().unwrap_or_else(parse_error_handler);
     if subjects_num < 20 {
         eprintln!("Minimum number of subjects is 20!");
         return;
     }
-    let mut target_generations = args[2].parse::<u32>().unwrap();
+
+    let mut target_generations = args[2].parse::<u32>().unwrap_or_else(parse_error_handler);
     if target_generations < 1 {
         eprintln!("Minimum number of generations is 1!");
         return;
     }
-    let mutation_probability = args[3].parse::<f64>().unwrap();
-    let selection_method: u8 = args[4].parse().unwrap();    // 0 - ruleta, 1 - turnaj
+
+    let mutation_probability = args[3].parse::<f64>().unwrap_or_else(parse_error_handler);
+    let selection_method: u8 = args[4].parse().unwrap();    // 0 - roulette, 1 - tournament
     if selection_method > 1 {
         eprintln!("Invalid selection method!");
         return;
@@ -65,18 +58,10 @@ fn main() {
         println!();
     }
 
-    let mut current_generation: Vec<core::Chromosome> = Vec::new();
+    let mut current_generation: Vec<core::Chromosome> = Vec::with_capacity(subjects_num);
 
     for _ in 0..subjects_num {
-        let instructions = random_instructions(&mut rng);
-
-        current_generation.push(core::Chromosome {
-            genes: instructions,
-            found_treasures: 0,
-            fitness: 0f64,
-            iterations: 0,
-            steps: String::new(),
-        });
+        current_generation.push(core::Chromosome::with_instructions(core::random_instructions(&mut rng)));
     }
 
     let mut generations: u32 = 0;
@@ -95,6 +80,7 @@ fn main() {
 
             target_generations = u32::MAX;
         }
+
         generations += 1;
         if generations % 500 == 0 {
             print!("\r\t\t\t\t\t\t\t\r");
@@ -104,22 +90,18 @@ fn main() {
                        generations, best_so_far_ref.fitness,
                        best_so_far_ref.found_treasures, best_so_far_ref.steps.len(), best_so_far_ref.iterations);
             }
-            std::io::stdout().flush().unwrap();
+            std::io::stdout().flush().ok();
         }
+
         for i in 0..current_generation.len() {
             let mut current_chromosome = current_generation.get_mut(i).unwrap();
             let mut steps: String = String::new();
             let (iters, found_treasures) = core::run_virtual_machine(&current_chromosome.genes, &game_area, &mut steps, player_x, player_y, treasures);
-            let mut fitness: f64 = found_treasures as f64 / treasures as f64;
-            fitness -= steps.len() as f64 * 0.005;
-            if fitness < 0.0 {
-                fitness = 0.0;
-            }
 
             current_chromosome.found_treasures = found_treasures;
             current_chromosome.iterations = iters;
+            current_chromosome.fitness = core::calculate_fitness(steps.len(), found_treasures, treasures);
             current_chromosome.steps = steps;
-            current_chromosome.fitness = fitness;
         }
 
         current_generation.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
@@ -130,7 +112,6 @@ fn main() {
                 println!("\nSuccessful solution! Generation: {}, Fitness: {}, Steps: {} ({}), Iterations: {}",
                          generations, chromosome.fitness, chromosome.steps, chromosome.steps.len(), chromosome.iterations);
                 println!("{:?}", chromosome.genes);
-                print!("Do you want to keep searching for a better solution? y/N: ");
 
                 if !ask_user("Do you want to keep searching for a better solution? y/N: ") {
                     return;
@@ -138,35 +119,29 @@ fn main() {
             }
         }
 
-        let mut new_generation: Vec<Chromosome> = Vec::new();
-        while new_generation.len() < subjects_num as usize {
+        let mut new_generation: Vec<Chromosome> = Vec::with_capacity(subjects_num);
+        while new_generation.len() < subjects_num {
             let (parent1, parent2) = if selection_method == 0 {
                 core::selection_roulette(&current_generation, total_fitness, &mut rng)
             } else {
                 core::selection_tournament(&current_generation, &mut rng)
             };
 
-            let mut iterations = subjects_num as usize - new_generation.len();
+            let mut iterations = subjects_num - new_generation.len();
             if iterations > core::NUM_OF_CHILDREN as usize {
                 iterations = core::NUM_OF_CHILDREN as usize;
             }
             for _ in 0..iterations {
-                new_generation.push(core::Chromosome {
-                    genes: core::reproduce(parent1, parent2, mutation_probability, &mut rng),
-                    fitness: 0.0,
-                    steps: String::new(),
-                    found_treasures: 0,
-                    iterations: 0,
-                })
+                new_generation.push(core::Chromosome::with_instructions(core::reproduce(parent1, parent2, mutation_probability, &mut rng)));
             }
         }
 
-        assert_eq!(new_generation.len(), subjects_num as usize);
-        let local_best: Option<Chromosome> = Option::Some(current_generation.swap_remove(0));
+        debug_assert_eq!(new_generation.len(), subjects_num);
+        let local_best: Chromosome = current_generation.swap_remove(0);
         if best_so_far.is_none() {
-            best_so_far = local_best;
-        } else if local_best.as_ref().unwrap().fitness > best_so_far.as_ref().unwrap().fitness {
-            best_so_far = local_best;
+            best_so_far = Some(local_best);
+        } else if local_best.fitness > best_so_far.as_ref().unwrap().fitness {
+            best_so_far = Some(local_best);
         }
         current_generation = new_generation;
     }
@@ -176,9 +151,14 @@ fn ask_user(text: &str) -> bool {
     print!("{}", text);
     std::io::stdout().flush().unwrap();
     let mut ans = String::new();
-    std::io::stdin().read_line(&mut ans).unwrap();
+    std::io::stdin().read_line(&mut ans).ok();
     if !ans.trim().eq_ignore_ascii_case("y") {
         return false;
     }
     return true;
+}
+
+fn parse_error_handler<T, E>(_e: E) -> T {
+    eprintln!("Failed to parse number!");
+    exit(-1);
 }
