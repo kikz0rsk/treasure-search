@@ -42,7 +42,8 @@ pub fn random_instructions(rng: &mut Pcg64) -> Vec<INSTR> {
     return output;
 }
 
-pub fn run_virtual_machine(instructions: &Vec<u8>, original_game_area: &Vec<Vec<u8>>, steps: &mut String, mut player_x: isize, mut player_y: isize, treasures: u32) -> (u32, u32) {
+pub fn run_virtual_machine(instructions: &Vec<u8>, original_game_area: &Vec<Vec<u8>>,
+        steps: &mut String, mut player_x: isize, mut player_y: isize, treasures: u32) -> (u32, u32) {
     let rows = original_game_area.len();
     let columns = original_game_area[0].len();
 
@@ -60,11 +61,11 @@ pub fn run_virtual_machine(instructions: &Vec<u8>, original_game_area: &Vec<Vec<
         match operation {
             0 => {
                 // Increment
-                machine_memory[data] = cyclic_increment_u8(machine_memory[data]);
+                machine_memory[data] = machine_memory[data].wrapping_add(1);
             }
             64 => {
                 // Decrement
-                machine_memory[data] = cyclic_decrement_u8(machine_memory[data]);
+                machine_memory[data] = machine_memory[data].wrapping_add(1);
             }
             128 => {
                 // Jump
@@ -191,20 +192,4 @@ pub fn build_game_area() -> Vec<Vec<u8>> {
     game_area[5][4] = AREA_TILE_TREASURE;
     game_area[6][3] = AREA_TILE_PLAYER;
     return game_area;
-}
-
-#[inline]
-fn cyclic_increment_u8(n: u8) -> u8 {
-    if n == u8::MAX {
-        return 0;
-    }
-    return n + 1;
-}
-
-#[inline]
-fn cyclic_decrement_u8(n: u8) -> u8 {
-    if n == u8::MIN {
-        return 0;
-    }
-    return n - 1;
 }
